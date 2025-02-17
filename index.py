@@ -38,7 +38,7 @@ init_db()
 # หน้าแรก
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return send_from_directory(os.getcwd(), 'index.html')
 
 # ตรวจสอบสถานะ VIP
 @app.route("/check_vip", methods=["POST"])
