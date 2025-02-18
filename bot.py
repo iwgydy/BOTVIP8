@@ -9,7 +9,7 @@ from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 # ตั้งค่าข้อมูลบอทและแอดมิน
 BOT_TOKEN = "7794815235:AAFxQbDIKUYVp-cdBlJagcSpPhOAIvJ7aKM"
 ADMIN_ID = 6219029635
-START_PY_PATH = "/workspaces/MHDDoS/start.py"
+START_PY_PATH = "start.py"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 db_lock = Lock()
