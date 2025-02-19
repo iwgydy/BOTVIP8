@@ -7,8 +7,8 @@ import telebot
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 # ตั้งค่าข้อมูลบอทและแอดมิน
-BOT_TOKEN = "7794815235:AAFxQbDIKUYVp-cdBlJagcSpPhOAIvJ7aKM"
-ADMIN_ID = 6219029635
+BOT_TOKEN = "7929038707:AAHq52QK_p2TLxSPF4f-Q51Fb8oV1uIM9qc"
+ADMIN_ID = 7520172820
 START_PY_PATH = "start.py"
 
 bot = telebot.TeleBot(BOT_TOKEN)
